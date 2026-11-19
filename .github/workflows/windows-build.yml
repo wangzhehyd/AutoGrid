@@ -1,0 +1,55 @@
+name: Windows x64 build
+
+on:
+  push:
+    branches:
+      - copilot/windows-binary-build
+    paths:
+      - ".github/workflows/windows-build.yml"
+      - "autogrid-mingw-compat.h"
+      - "**.cpp"
+      - "**.cc"
+      - "**.h"
+      - "configure.ac"
+      - "Makefile.am"
+      - "ad4_shared/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install MinGW and build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-mingw-w64-x86-64-posix tcsh autoconf automake libtool
+      - name: Compile AutoGrid for Windows
+        run: |
+          autoreconf -i
+          mkdir build
+          cd build
+          CXXFLAGS="-O2 -static -fpermissive -include $GITHUB_WORKSPACE/autogrid-mingw-compat.h" \
+            LDFLAGS="-static" \
+            ../configure --host=x86_64-w64-mingw32
+          make -j2
+          file autogrid4.exe
+          x86_64-w64-mingw32-objdump -p autogrid4.exe | grep "DLL Name:"
+          mkdir -p ../dist
+          cp autogrid4.exe ../dist/autogrid4-windows-x64.exe
+      - name: Package corresponding source
+        run: |
+          git archive --format=tar.gz --output=dist/autogrid4-4.2.8-source.tar.gz "$GITHUB_SHA"
+          printf '%s\n' \
+            "AutoGrid 4.2.8 Windows x64 build" \
+            "Build command: CXXFLAGS='-O2 -static -fpermissive -include autogrid-mingw-compat.h' LDFLAGS='-static' ../configure --host=x86_64-w64-mingw32" \
+            "Source is licensed under GNU GPL version 2 or later; see COPYING." \
+            > dist/BUILD-WINDOWS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: autogrid4-windows-x64
+          path: dist/
+          retention-days: 90
